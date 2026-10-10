@@ -288,6 +288,8 @@ export function openDetailModal(coin, currency = 'usd') {
   previousFocusedElement = document.activeElement;
   const fmt = createFormatters(currency);
 
+  setChartLoading(true, false);
+
   modalCoinImg.src = coin.image;
   modalTitle.textContent = coin.name;
   modalSymbol.textContent = (coin.symbol || '').toUpperCase();
@@ -424,7 +426,6 @@ export function showToast(title, message) {
   tTitle.textContent = title;
 
   const tMsg = document.createElement('span');
-  tMsg.className = 'toast-message';
   tMsg.textContent = message;
 
   body.append(tTitle, tMsg);
@@ -438,7 +439,6 @@ export function showToast(title, message) {
   toast.append(body, closeBtn);
   toastContainer.appendChild(toast);
 
-  // 6 saniye sonra otomatik kaldır
   setTimeout(() => {
     if (toast.isConnected) toast.remove();
   }, 6000);
