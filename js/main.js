@@ -1,5 +1,5 @@
 // Orkestrasyon, tema yönetimi, alarmlar ve veri döngüsü
-import { fetchTopCoins, fetchCoinChart, fetchCoinDetail } from './api.js';
+import { fetchTopCoins, fetchCoinsByIds, searchCoinsGlobal, fetchCoinChart, fetchCoinDetail } from './api.js';
 import { 
   getFavorites, 
   toggleFavorite, 
@@ -38,6 +38,8 @@ import {
 const state = {
   rawCoins: [],
   filteredCoins: [],
+  searchCoins: [],
+  searchRequestId: 0,
   prevPrices: new Map(),
   sortKey: 'market_cap',
   sortOrder: 'desc',
@@ -45,7 +47,10 @@ const state = {
   currency: getCurrency(),
   viewTab: 'all',
   activeCoin: null,
+  activeCoinCurrency: null,
   activeDays: 1,
+  chartRequestId: 0,
+  detailRequestId: 0,
   theme: document.documentElement.getAttribute('data-theme') || 'dark',
   timerId: null
 };
@@ -62,7 +67,9 @@ function processPipeline() {
   const q = state.searchQuery.trim().toLowerCase();
   const favList = getFavorites();
 
-  let result = state.rawCoins.filter(c => {
+  const coinMap = new Map(state.rawCoins.map(coin => [coin.id, coin]));
+  state.searchCoins.forEach(coin => coinMap.set(coin.id, coin));
+  let result = Array.from(coinMap.values()).filter(c => {
     if (state.viewTab === 'fav' && !favList.includes(c.id)) {
       return false;
     }
@@ -110,6 +117,24 @@ async function loadData(bypassCache = false) {
     state.prevPrices = priceMap;
 
     state.rawCoins = data;
+    if (state.activeCoin && state.activeCoinCurrency !== state.currency) {
+      let refreshedCoin = data.find(coin => coin.id === state.activeCoin.id);
+      if (!refreshedCoin) {
+        try {
+          refreshedCoin = (await fetchCoinsByIds(state.currency, [state.activeCoin.id]))[0];
+        } catch {
+          // Mevcut ayrıntı görünümünü koru; sonraki yenilemede tekrar denenecek.
+        }
+      }
+      if (refreshedCoin) {
+        state.activeCoin = refreshedCoin;
+        state.activeCoinCurrency = state.currency;
+        if (!document.getElementById('detail-modal').hidden) {
+          openDetailModal(refreshedCoin, state.currency);
+          loadChartData(refreshedCoin.id, state.activeDays);
+        }
+      }
+    }
     processPipeline();
 
     // Alarmları kontrol et ve tetiklenenleri bildir
@@ -146,24 +171,32 @@ async function loadData(bypassCache = false) {
 
 async function handleCoinSelect(coin) {
   state.activeCoin = coin;
+  state.activeCoinCurrency = state.currency;
+  const requestId = ++state.detailRequestId;
   openDetailModal(coin, state.currency);
   loadChartData(coin.id, state.activeDays);
 
   try {
     const detail = await fetchCoinDetail(coin.id);
+    if (requestId !== state.detailRequestId || state.activeCoin?.id !== coin.id) return;
     const desc = detail.description?.tr || detail.description?.en || '';
     updateModalDescription(desc);
   } catch {
-    updateModalDescription('Varlık açıklaması şu anda yüklenemedi.');
+    if (requestId === state.detailRequestId && state.activeCoin?.id === coin.id) {
+      updateModalDescription('Varlık açıklaması şu anda yüklenemedi.');
+    }
   }
 }
 
 async function loadChartData(coinId, days) {
+  const requestId = ++state.chartRequestId;
   setChartLoading(true, false);
   const canvas = document.getElementById('coin-chart');
 
   try {
-    const prices = await fetchCoinChart(coinId, state.currency, days);
+    const result = await fetchCoinChart(coinId, state.currency, days);
+    if (requestId !== state.chartRequestId || state.activeCoin?.id !== coinId) return;
+    const prices = result?.prices;
     
     if (!prices || prices.length === 0) {
       setChartLoading(false, true);
@@ -171,12 +204,12 @@ async function loadChartData(coinId, days) {
     }
 
     const isPositive = (prices[prices.length - 1][1] - prices[0][1]) >= 0;
-    renderPriceChart(canvas, prices, state.currency, isPositive);
+    const rendered = renderPriceChart(canvas, prices, state.currency, days, isPositive);
     
     // Grafik çizildiğinde hata katmanını kapat
-    setChartLoading(false, false);
+    setChartLoading(false, !rendered);
   } catch (err) {
-    setChartLoading(false, true);
+    if (requestId === state.chartRequestId) setChartLoading(false, true);
   }
 }
 
@@ -226,11 +259,35 @@ function handleSortClick(key) {
 }
 
 function setupListeners() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('detail-modal').hidden) {
+      state.detailRequestId++;
+      state.chartRequestId++;
+      destroyChart();
+    }
+  });
+
   // Arama filtresi
-  document.getElementById('search-input').addEventListener('input', debounce((e) => {
+  const runGlobalSearch = debounce((query, requestId) => {
+    query = query.trim();
+    if (query.length >= 2) {
+      searchCoinsGlobal(query)
+        .then(ids => fetchCoinsByIds(state.currency, ids))
+        .then(coins => {
+          if (requestId !== state.searchRequestId || query !== state.searchQuery.trim()) return;
+          state.searchCoins = coins;
+          processPipeline();
+        })
+        .catch(() => {}); // Yerel listedeki eşleşmeler kullanılabilir durumda kalır.
+    }
+  }, 250);
+  document.getElementById('search-input').addEventListener('input', (e) => {
     state.searchQuery = e.target.value;
+    state.searchCoins = [];
+    const requestId = ++state.searchRequestId;
     processPipeline();
-  }, 200));
+    runGlobalSearch(state.searchQuery, requestId);
+  });
 
   // Para birimi
   const currSelect = document.getElementById('currency-select');
@@ -238,9 +295,12 @@ function setupListeners() {
   currSelect.addEventListener('change', (e) => {
     state.currency = e.target.value;
     setCurrency(state.currency);
+    state.searchCoins = [];
+    state.searchRequestId++;
     loadData(false);
-    if (state.activeCoin) {
-      loadChartData(state.activeCoin.id, state.activeDays);
+    const searchInput = document.getElementById('search-input');
+    if (searchInput.value.trim().length >= 2) {
+      searchInput.dispatchEvent(new Event('input'));
     }
   });
 
@@ -287,12 +347,16 @@ function setupListeners() {
 
   // Modal kapatma
   document.getElementById('modal-close-btn').addEventListener('click', () => {
+    state.detailRequestId++;
+    state.chartRequestId++;
     destroyChart();
     closeDetailModal();
   });
 
   document.getElementById('detail-modal').addEventListener('click', (e) => {
     if (e.target.id === 'detail-modal') {
+      state.detailRequestId++;
+      state.chartRequestId++;
       destroyChart();
       closeDetailModal();
     }
@@ -300,11 +364,12 @@ function setupListeners() {
 
   // Alarm modalı açma ve kapama
   document.getElementById('alerts-modal-open-btn').addEventListener('click', () => {
-    openAlertsModal(getAlerts(), (deletedId) => {
+    const handleDelete = (deletedId) => {
       const remaining = deleteAlert(deletedId);
-      renderAlertsList(remaining, (id) => deleteAlert(id));
+      renderAlertsList(remaining, handleDelete);
       updateMetaStatus({ alertsCount: remaining.length });
-    });
+    };
+    openAlertsModal(getAlerts(), handleDelete);
   });
 
   document.getElementById('alerts-modal-close-btn').addEventListener('click', closeAlertsModal);
@@ -331,6 +396,9 @@ function setupListeners() {
     if (res.success) {
       showToast('ALARM KAYDEDİLDİ', `${state.activeCoin.name} için hedef fiyat listeye eklendi.`);
       updateMetaStatus({ alertsCount: getAlerts().length });
+      document.getElementById('alert-target-price').value = '';
+    } else {
+      showToast('ALARM EKLENEMEDİ', res.error || 'Fiyat hedefini kontrol edin.');
     }
   });
 
