@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="KRİPTOSKOP — Gerçek zamanlı kripto izleme, derinlemesine piyasa analizi ve fiyat takip terminali.">
+  <meta name="theme-color" content="#090B0E" id="meta-theme-color">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="KRİPTOSKOP — Kripto Piyasa Terminali">
+  <meta property="og:description" content="Hızlı, yalın ve veri odaklı profesyonel kripto analiz terminali.">
+  <meta property="og:type" content="website">
+
+  <title>KRİPTOSKOP — Kripto Piyasa Terminali</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- FOUC Önleyici: Tema durumunu CSS yüklenmeden önce uygula -->
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('kriptoskop_theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+        var meta = document.getElementById('meta-theme-color');
+        if (meta) meta.setAttribute('content', theme === 'light' ? '#E4E8EC' : '#090B0E');
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="terminal-shell">
+    <header class="terminal-header">
+      <div class="brand">
+        <!-- KRİPTOSKOP Scope / Radar İkonu -->
+        <svg class="brand-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <line x1="12" y1="3" x2="12" y2="7"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+          <line x1="3" y1="12" x2="7" y2="12"/>
+          <line x1="17" y1="12" x2="21" y2="12"/>
+          <path d="M7 12h2l1.5-3.5 2.5 7 2-4.5h2" stroke="var(--c-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-title">KRİPTOSKOP</span>
+          <span class="brand-sub">SPOT VERİ VE DERİNLİK RADARI</span>
+        </div>
+      </div>
+
+      <div class="terminal-meta">
+        <button id="theme-toggle" class="ctrl-btn" aria-label="Açık/koyu tema değiştir">
+          <svg id="theme-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span id="theme-text">TEMA</span>
+        </button>
+
+        <button id="alerts-modal-open-btn" class="ctrl-btn" aria-label="Kayıtlı fiyat alarmlarını görüntüle">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span>ALARMLAR (<span id="alerts-count-badge">0</span>)</span>
+        </button>
+
+        <div class="currency-switch">
+          <label for="currency-select" class="meta-label">BİRİM:</label>
+          <select id="currency-select" class="ctrl-select" aria-label="Görüntüleme para birimi seçin">
+            <option value="usd">USD ($)</option>
+            <option value="eur">EUR (€)</option>
+            <option value="try">TRY (₺)</option>
+          </select>
+        </div>
+
+        <div class="status-indicator">
+          <span class="pulse-dot" id="stream-pulse"></span>
+          <span class="status-text" id="stream-status">SENKRONİZE</span>
+        </div>
+        <span class="meta-label" id="data-source">KAYNAK: —</span>
+        <div class="meta-clock">
+          <span class="meta-label">GÜNCELLEME:</span>
+          <time id="last-update">--:--:--</time>
+        </div>
+        <button id="refresh-btn" class="ctrl-btn" aria-label="Verileri elle hemen yenile">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 2v6h-6M3 12a9 9 0 0 1 15.5-6.4L21 8M3 22v-6h6M21 12a9 9 0 0 1-15.5 6.4L3 16"/>
+          </svg>
+          <span>YENİLE</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="command-bar" aria-label="Terminal kontrolleri">
+      <div class="view-segments" role="tablist" aria-label="Görünüm sekmeleri">
+        <button role="tab" aria-selected="true" id="tab-all" class="seg-btn active" data-view="all">TÜMÜ</button>
+        <button role="tab" aria-selected="false" id="tab-fav" class="seg-btn" data-view="fav">FAVORİLER (<span id="fav-count">0</span>)</button>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input 
+          type="text" 
+          id="search-input" 
+          placeholder="Varlık adı veya sembol filtrele..." 
+          autocomplete="off" 
+          spellcheck="false"
+          aria-label="Varlık ara"
+        >
+        <span class="filter-count" id="filter-count">0/0</span>
+      </div>
+
+      <div class="mobile-sort-select" aria-label="Mobil sıralama seçimi">
+        <label for="mobile-sort">SIRALA:</label>
+        <select id="mobile-sort" aria-label="Mobil sıralama kriteri">
+          <option value="rank-asc">Sıra (Artan)</option>
+          <option value="price-desc">Fiyat (Azalan)</option>
+          <option value="price-asc">Fiyat (Artan)</option>
+          <option value="change24h-desc">24s Değişim (Azalan)</option>
+          <option value="change24h-asc">24s Değişim (Artan)</option>
+          <option value="marketCap-desc">Piyasa Değeri (Azalan)</option>
+        </select>
+      </div>
+    </section>
+
+    <section id="banner-region" aria-live="polite"></section>
+
+    <main class="viewport">
+      <div class="table-container">
+        <table class="data-grid" id="market-table">
+          <thead>
+            <tr>
+              <th scope="col" class="col-fav" aria-label="Favori">★</th>
+              <th scope="col" class="col-rank">#</th>
+              <th scope="col" class="col-asset">VARLIK</th>
+              <th scope="col" class="col-num sortable" data-key="price" tabindex="0" role="button" aria-label="Fiyata göre sırala">
+                <span id="col-price-label">FİYAT (USD)</span>
+                <span class="sort-icon" aria-hidden="true"></span>
+              </th>
+              <th scope="col" class="col-num sortable" data-key="change24h" tabindex="0" role="button" aria-label="24 saatlik değişime göre sırala">
+                <span>24S DEĞİŞİM</span>
+                <span class="sort-icon" aria-hidden="true"></span>
+              </th>
+              <th scope="col" class="col-num sortable active desc" data-key="marketCap" tabindex="0" role="button" aria-label="Piyasa değerine göre sırala">
+                <span>PİYASA DEĞERİ</span>
+                <span class="sort-icon" aria-hidden="true"></span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="market-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card-flow" id="card-flow"></div>
+      <div id="load-more-sentinel" aria-hidden="true"></div>
+
+      <div class="empty-state" id="empty-state" hidden>
+        <p class="empty-title" id="empty-title">KAYIT BULUNAMADI</p>
+        <p class="empty-sub" id="empty-sub">Filtre kriterine uyan kripto varlık yok.</p>
+      </div>
+    </main>
+  </div>
+
+  <footer class="data-attribution">Piyasa verileri CoinGecko ve CoinPaprika tarafından sağlanır. Kripto para fiyatları değişkendir.</footer>
+  <!-- Detay Modalı -->
+  <div class="modal-backdrop" id="detail-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-window">
+      <header class="modal-header">
+        <div class="modal-title-wrap">
+          <img id="modal-coin-img" class="asset-icon" src="" alt="" width="24" height="24">
+          <div>
+            <h2 id="modal-title" class="modal-coin-name">---</h2>
+            <span id="modal-symbol" class="modal-coin-symbol">---</span>
+          </div>
+        </div>
+        <button id="modal-close-btn" class="ctrl-btn icon-only" aria-label="Pencereyi kapat">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="modal-metric-strip">
+          <div class="metric-item">
+            <span class="metric-label">GÜNCEL FİYAT</span>
+            <span id="modal-price" class="metric-val">--</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">24S YÜKSEK / DÜŞÜK</span>
+            <span id="modal-high-low" class="metric-val">-- / --</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">PİYASA DEĞERİ</span>
+            <span id="modal-mcap" class="metric-val">--</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">DOLAŞIMDAKİ ARZ</span>
+            <span id="modal-supply" class="metric-val">--</span>
+          </div>
+        </div>
+
+        <!-- Hızlı Alarm Oluşturma -->
+        <section class="alert-inline-box" aria-label="Hızlı alarm kur">
+          <span class="alert-box-title">HIZLI ALARM OLUŞTUR</span>
+          <form id="create-alert-form" class="alert-form-grid">
+            <div class="form-group">
+              <label for="alert-condition">KOŞUL</label>
+              <select id="alert-condition" class="ctrl-select">
+                <option value="above">Fiyat üstüne çıkınca (≥</option>
+                <option value="below">Fiyat altına inince (≤</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="alert-target-price">HEDEF FİYAT (<span id="alert-cur-symbol">USD</span>)</label>
+              <input type="number" id="alert-target-price" step="any" required placeholder="0.00" class="ctrl-input">
+            </div>
+            <button type="submit" class="ctrl-btn highlight">ALARM EKLE</button>
+          </form>
+        </section>
+
+        <!-- Grafik Alanı -->
+        <div class="chart-section">
+          <div class="chart-header">
+            <span class="chart-title">FİYAT EĞRİSİ</span>
+            <div class="range-selector" role="group" aria-label="Grafik zaman aralığı">
+              <button class="range-btn active" data-days="1">24S</button>
+              <button class="range-btn" data-days="7">7G</button>
+              <button class="range-btn" data-days="30">30G</button>
+              <button class="range-btn" data-days="365">1Y</button>
+            </div>
+          </div>
+          <div class="chart-viewport">
+            <div id="chart-loader" class="chart-overlay-state" hidden>VERİ İNDİRİLİYOR...</div>
+            <div id="chart-error" class="chart-overlay-state" hidden>GRAFİK VERİSİ ALINAMADI</div>
+            <canvas id="coin-chart" aria-label="Fiyat geçmişi grafiği" role="img"></canvas>
+          </div>
+        </div>
+
+        <div class="desc-section">
+          <h3 class="desc-heading">VARLIK ÖZETİ</h3>
+          <p id="modal-desc" class="desc-content">Yükleniyor...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kayıtlı Alarmlar Modalı -->
+  <div class="modal-backdrop" id="alerts-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="alerts-modal-title">
+    <div class="modal-window">
+      <header class="modal-header">
+        <h2 id="alerts-modal-title" class="modal-coin-name">KAYITLI FİYAT ALARMLARI</h2>
+        <button id="alerts-modal-close-btn" class="ctrl-btn icon-only" aria-label="Alarm penceresini kapat">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div id="alerts-list-container" class="alerts-stack"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Bildirim Konteyneri -->
+  <div id="toast-container" class="toast-hub" aria-live="assertive" aria-atomic="true"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
+
