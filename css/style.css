@@ -718,6 +718,19 @@ th.sortable:focus-visible,
   z-index: 2;
 }
 
+/* Hata ve önbellek uyarıları grafiğin üstünü kapatmasın. */
+#chart-error.chart-overlay-state {
+  inset: 8px auto auto 8px;
+  width: auto;
+  height: auto;
+  padding: 5px 8px;
+  background-color: var(--c-panel);
+  border: 1px solid var(--c-border-strong);
+  color: var(--c-accent);
+  font-size: 10px;
+  pointer-events: none;
+}
+
 [data-theme="light"] .chart-overlay-state {
   background-color: rgba(228, 232, 236, 0.8);
 }
