@@ -112,7 +112,7 @@ async function loadData(bypassCache = false) {
     state.rawCoins = data;
     processPipeline();
 
-    // Fiyat alarmlarını tetikle ve kontrol et
+    // Alarmları kontrol et ve tetiklenenleri bildir
     const fired = checkAlerts(data, state.currency);
     fired.forEach(({ alert, currentPrice }) => {
       const condText = alert.condition === 'above' ? 'üzerine çıktı' : 'altına indi';
@@ -164,14 +164,18 @@ async function loadChartData(coinId, days) {
 
   try {
     const prices = await fetchCoinChart(coinId, state.currency, days);
-    setChartLoading(false, false);
-    if (prices.length === 0) {
+    
+    if (!prices || prices.length === 0) {
       setChartLoading(false, true);
       return;
     }
+
     const isPositive = (prices[prices.length - 1][1] - prices[0][1]) >= 0;
     renderPriceChart(canvas, prices, state.currency, isPositive);
-  } catch {
+    
+    // Grafik çizildiğinde hata katmanını kapat
+    setChartLoading(false, false);
+  } catch (err) {
     setChartLoading(false, true);
   }
 }
@@ -188,7 +192,6 @@ function handleThemeToggle() {
   applyTheme(next);
   saveTheme(next);
 
-  // Açık olan grafiğin renklerini yeni temaya uydur
   if (state.activeCoin) {
     loadChartData(state.activeCoin.id, state.activeDays);
   }
