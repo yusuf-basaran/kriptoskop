@@ -1,4 +1,4 @@
-// Temaya duyarlı, Chart.js tabanlı finansal çizgi grafik yöneticisi
+// Temaya duyarlı, Chart.js tabanlı osiloskop/çizgi grafik yöneticisi
 let chartInstance = null;
 
 export function destroyChart() {
@@ -13,7 +13,6 @@ export function renderPriceChart(canvasEl, pricePoints, currency = 'usd', isPosi
 
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
   
-  // Terminal temasına göre dinamik renk paleti
   const gridColor = isLight ? '#D1D9E0' : '#1E2633';
   const tickColor = isLight ? '#57606A' : '#64748B';
   const tooltipBg = isLight ? '#F0F3F6' : '#0E1217';
