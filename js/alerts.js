@@ -1,94 +1,75 @@
-// localStorage üzerinde favoriler, para birimi, temalar ve alarmların yönetimi
-const FAVORITES_KEY = 'kriptoskop_favorites';
-const CURRENCY_KEY = 'kriptoskop_currency';
-const THEME_KEY = 'kriptoskop_theme';
-const ALERTS_KEY = 'kriptoskop_alerts';
+// Fiyat takip alarmlarının durumu, doğrulaması ve kontrol mekanizması
+import { getAlerts, saveAlerts } from './storage.js';
 
-const VALID_CURRENCIES = ['usd', 'eur', 'try'];
-
-export function getFavorites() {
-  try {
-    const raw = localStorage.getItem(FAVORITES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+export function createAlert({ coinId, coinSymbol, targetPrice, condition, currency }) {
+  const target = parseFloat(targetPrice);
+  if (!coinId || isNaN(target) || target <= 0) {
+    return { success: false, error: 'Geçersiz fiyat hedefi' };
   }
+
+  const alerts = getAlerts();
+  const newAlert = {
+    id: `${coinId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    coinId,
+    coinSymbol: coinSymbol.toUpperCase(),
+    targetPrice: target,
+    condition, // 'above' veya 'below'
+    currency: currency.toLowerCase(),
+    triggered: false,
+    triggeredAt: null,
+    createdAt: Date.now()
+  };
+
+  alerts.push(newAlert);
+  saveAlerts(alerts);
+  return { success: true, alert: newAlert };
 }
 
-export function toggleFavorite(coinId) {
-  const current = new Set(getFavorites());
-  if (current.has(coinId)) {
-    current.delete(coinId);
-  } else {
-    current.add(coinId);
-  }
-  const next = Array.from(current);
-  try {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
-  } catch {
-    // Depolama limitinde koru
-  }
-  return next;
+export function deleteAlert(alertId) {
+  const alerts = getAlerts().filter(a => a.id !== alertId);
+  saveAlerts(alerts);
+  return alerts;
 }
 
-export function isFavorite(coinId) {
-  return getFavorites().includes(coinId);
-}
+export function checkAlerts(currentCoins, currentCurrency) {
+  const alerts = getAlerts();
+  if (alerts.length === 0) return [];
 
-export function getCurrency() {
-  try {
-    const saved = (localStorage.getItem(CURRENCY_KEY) || 'usd').toLowerCase();
-    return VALID_CURRENCIES.includes(saved) ? saved : 'usd';
-  } catch {
-    return 'usd';
-  }
-}
+  const coinMap = new Map();
+  currentCoins.forEach(c => coinMap.set(c.id, c.current_price));
 
-export function setCurrency(currency) {
-  const normalized = currency.toLowerCase();
-  if (!VALID_CURRENCIES.includes(normalized)) return;
-  try {
-    localStorage.setItem(CURRENCY_KEY, normalized);
-  } catch {
-    // Depolama hatasında sessizce geç
-  }
-}
+  const newlyTriggered = [];
+  let stateModified = false;
 
-export function getSavedTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function saveTheme(theme) {
-  try {
-    if (theme) {
-      localStorage.setItem(THEME_KEY, theme);
-    } else {
-      localStorage.removeItem(THEME_KEY);
+  alerts.forEach(alert => {
+    if (alert.triggered || alert.currency !== currentCurrency.toLowerCase()) {
+      return;
     }
-  } catch {
-    // Korumalı ortamlarda sessiz kal
-  }
-}
 
-export function getAlerts() {
-  try {
-    const raw = localStorage.getItem(ALERTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+    const currentPrice = coinMap.get(alert.coinId);
+    if (currentPrice === undefined || currentPrice === null) return;
 
-export function saveAlerts(alerts) {
-  try {
-    localStorage.setItem(ALERTS_KEY, JSON.stringify(alerts));
-  } catch {
-    // Kota aşımında koru
+    let isHit = false;
+    if (alert.condition === 'above' && currentPrice >= alert.targetPrice) {
+      isHit = true;
+    } else if (alert.condition === 'below' && currentPrice <= alert.targetPrice) {
+      isHit = true;
+    }
+
+    if (isHit) {
+      alert.triggered = true;
+      alert.triggeredAt = Date.now();
+      stateModified = true;
+      newlyTriggered.push({
+        alert,
+        currentPrice
+      });
+    }
+  });
+
+  if (stateModified) {
+    saveAlerts(alerts);
   }
+
+  return newlyTriggered;
 }
