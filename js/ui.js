@@ -168,7 +168,7 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
     tdFav.className = 'col-fav';
     const favBtn = document.createElement('button');
     favBtn.className = `fav-btn ${favActive ? 'active' : ''}`;
-    favBtn.setAttribute('aria-label', `${coin.name} favorilere ekle`);
+    favBtn.setAttribute('aria-label', favActive ? `${coin.name} favorilerden çıkar` : `${coin.name} favorilere ekle`);
     favBtn.appendChild(createStarSvg(favActive));
     favBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -192,6 +192,10 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
     img.loading = 'lazy';
     img.width = 20;
     img.height = 20;
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = 'assets/coin-placeholder.svg';
+    };
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'asset-name';
@@ -237,7 +241,13 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
       e.stopPropagation();
       if (onFavToggle) onFavToggle(coin.id);
     });
-    headLeft.append(mobileFavBtn, assetBox.cloneNode(true));
+    const mobileAssetBox = assetBox.cloneNode(true);
+    const mobileImg = mobileAssetBox.querySelector('img');
+    if (mobileImg) mobileImg.onerror = () => {
+      mobileImg.onerror = null;
+      mobileImg.src = 'assets/coin-placeholder.svg';
+    };
+    headLeft.append(mobileFavBtn, mobileAssetBox);
 
     const cardRank = document.createElement('span');
     cardRank.className = 'col-rank';
@@ -290,7 +300,11 @@ export function openDetailModal(coin, currency = 'usd') {
 
   setChartLoading(true, false);
 
-  modalCoinImg.src = coin.image;
+  modalCoinImg.onerror = () => {
+    modalCoinImg.onerror = null;
+    modalCoinImg.src = 'assets/coin-placeholder.svg';
+  };
+  modalCoinImg.src = coin.image || 'assets/coin-placeholder.svg';
   modalTitle.textContent = coin.name;
   modalSymbol.textContent = (coin.symbol || '').toUpperCase();
   modalPrice.textContent = fmt.price.format(coin.current_price || 0);
