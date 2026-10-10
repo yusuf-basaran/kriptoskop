@@ -718,6 +718,10 @@ th.sortable:focus-visible,
   z-index: 2;
 }
 
+.chart-overlay-state[hidden] {
+  display: none;
+}
+
 /* Hata ve önbellek uyarıları grafiğin üstünü kapatmasın. */
 #chart-error.chart-overlay-state {
   inset: 8px auto auto 8px;
