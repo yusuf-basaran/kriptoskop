@@ -1,8 +1,8 @@
 // localStorage üzerinde favoriler, para birimi, temalar ve alarmların yönetimi
-const FAVORITES_KEY = 'deck50_favorites';
-const CURRENCY_KEY = 'deck50_currency';
-const THEME_KEY = 'deck50_theme';
-const ALERTS_KEY = 'deck50_alerts';
+const FAVORITES_KEY = 'kriptoskop_favorites';
+const CURRENCY_KEY = 'kriptoskop_currency';
+const THEME_KEY = 'kriptoskop_theme';
+const ALERTS_KEY = 'kriptoskop_alerts';
 
 const VALID_CURRENCIES = ['usd', 'eur', 'try'];
 
@@ -27,7 +27,7 @@ export function toggleFavorite(coinId) {
   try {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
   } catch {
-    // Depolama limitinde sessizce başarısız ol
+    // Depolama limitinde koru
   }
   return next;
 }
@@ -51,13 +51,13 @@ export function setCurrency(currency) {
   try {
     localStorage.setItem(CURRENCY_KEY, normalized);
   } catch {
-    // Depolama hatasında çalışma zamanı durumunu koru
+    // Depolama hatasında sessizce geç
   }
 }
 
 export function getSavedTheme() {
   try {
-    return localStorage.getItem(THEME_KEY); // 'light', 'dark' veya null
+    return localStorage.getItem(THEME_KEY);
   } catch {
     return null;
   }
@@ -71,7 +71,7 @@ export function saveTheme(theme) {
       localStorage.removeItem(THEME_KEY);
     }
   } catch {
-    // Kısıtlı ortamlarda sessiz kal
+    // Korumalı ortamlarda sessiz kal
   }
 }
 
