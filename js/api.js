@@ -1,4 +1,4 @@
-// CoinGecko API, Vercel proxy desteği, iptal edilebilir grafik istekleri ve teşhis
+// CoinGecko API, Vercel proxy desteği, iptal edilebilir grafik istekleri ve geriye dönük uyumluluk
 const PAGE_CACHE_TTL_MS = 60 * 1000;
 const CHART_CACHE_TTL_MS = 120 * 1000;
 
@@ -20,7 +20,7 @@ export class ApiError extends Error {
 
 // Vercel üzerindeyken /api/proxy endpoint'ini kullanır, yerelde doğrudan çağırır
 function buildApiUrl(subpath, queryObj = {}) {
-  const isVercelHost = window.location.hostname.includes('vercel.app');
+  const isVercelHost = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
   const params = new URLSearchParams(queryObj);
 
   if (isVercelHost) {
@@ -85,6 +85,11 @@ export async function fetchCoinsPage(currency = 'usd', page = 1, forceBypass = f
     if (err instanceof ApiError) throw err;
     throw new ApiError('Ağ bağlantısı kurulamadı. Sunucuya erişilemiyor.', 0);
   }
+}
+
+// main.js içindeki eski 'fetchTopCoins' çağrısı için köprü (export)
+export async function fetchTopCoins(currency = 'usd', forceBypass = false) {
+  return await fetchCoinsPage(currency, 1, forceBypass);
 }
 
 export async function fetchCoinsByIds(currency = 'usd', coinIds = []) {
