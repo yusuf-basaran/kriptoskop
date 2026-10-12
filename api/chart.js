@@ -1,221 +1,71 @@
-// Chart.js terminal osiloskop grafik motoru, veri doğrulama ve eksen biçimlendirme
-let chartInstance = null;
+import { method, idParam, currencyParam, cache, envelope, error, withProvider } from './_lib/http.js';
+import { cg, paprika } from './_lib/providers.js';
 
-export function destroyChart() {
-  if (chartInstance) {
-    chartInstance.destroy();
-    chartInstance = null;
-  }
-  const canvas = document.getElementById('coin-chart');
-  if (canvas) {
-    const ctx = canvas.getContext('2d');
-    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-}
+const VALID_DAYS = new Set([1, 7, 30, 365]);
 
-export function validateAndCleanPoints(points) {
-  if (!Array.isArray(points)) return [];
+// CoinPaprika tarihçe aralığı: gün sayısına göre makul nokta sayısı üretir.
+const PAPRIKA_INTERVAL = { 1: '5m', 7: '1h', 30: '6h', 365: '1d' };
 
-  return points.filter(p => {
-    if (!Array.isArray(p) || p.length < 2) return false;
-    const time = p[0];
-    const val = p[1];
-    return typeof time === 'number' && !isNaN(time) && time > 0 &&
-           typeof val === 'number' && !isNaN(val) && isFinite(val);
-  });
-}
-
-export function downsamplePoints(points, maxPoints = 300) {
-  if (points.length <= maxPoints) return points;
-  const step = Math.ceil(points.length / maxPoints);
-  const result = [];
-
-  for (let i = 0; i < points.length; i += step) {
-    result.push(points[i]);
-  }
-
-  const lastPoint = points[points.length - 1];
-  if (result[result.length - 1] !== lastPoint) {
-    result.push(lastPoint);
-  }
-
-  return result;
-}
-
-function formatXDate(timestamp, days) {
-  const d = new Date(timestamp);
-
-  if (days <= 1) {
-    return d.toLocaleTimeString('tr-TR', {
-      hour: '2-digit',
-      minute: '2-digit'
+function parseDays(value) {
+  const days = Number(value || 1);
+  if (!VALID_DAYS.has(days)) {
+    throw Object.assign(new Error('days 1, 7, 30 veya 365 olmalıdır'), {
+      status: 400,
+      code: 'INVALID_DAYS'
     });
-  } else if (days <= 30) {
-    return d.toLocaleDateString('tr-TR', {
-      day: '2-digit',
-      month: '2-digit'
-    });
-  } else {
-    const month = d.toLocaleDateString('tr-TR', { month: '2-digit' });
-    const year = String(d.getFullYear()).slice(-2);
-    return `${month}.${year}`;
   }
+  return days;
 }
 
-export function renderPriceChart(
-  canvasEl,
-  rawPoints,
-  currency = 'usd',
-  days = 1,
-  isPositive = true
-) {
-  destroyChart();
+function cleanPrices(rows) {
+  return rows
+    .filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    .map(p => [p[0], p[1]]);
+}
 
-  const cleaned = validateAndCleanPoints(rawPoints);
-  if (cleaned.length < 2) {
-    return false;
-  }
+export default async function handler(req, res) {
+  if (!method(req, res)) return;
 
-  const finalPoints = downsamplePoints(cleaned, 300);
-  const isLight =
-    document.documentElement.getAttribute('data-theme') === 'light';
+  try {
+    const id = idParam(req.query.id);
+    const currency = currencyParam(req.query.currency);
+    const days = parseDays(req.query.days);
 
-  const gridColor = isLight
-    ? 'rgba(0, 0, 0, 0.08)'
-    : 'rgba(255, 255, 255, 0.08)';
-  const tickColor = isLight ? '#1E293B' : '#94A3B8';
-  const tooltipBg = isLight ? '#FFFFFF' : '#0E1217';
-  const tooltipText = isLight ? '#0F172A' : '#F1F5F9';
-  const tooltipBorder = isLight ? '#CBD5E1' : '#2D3748';
-  const strokeColor = isPositive ? '#10B981' : '#EF4444';
-  const hoverPointBorder = isLight ? '#F0F3F6' : '#090B0E';
+    let note;
 
-  const timestamps = finalPoints.map(point => point[0]);
-  const values = finalPoints.map(point => point[1]);
-
-  const currencyFormatter = new Intl.NumberFormat('tr-TR', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4
-  });
-
-  const compactFormatter = new Intl.NumberFormat('tr-TR', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-    notation: 'compact',
-    compactDisplay: 'short'
-  });
-
-  const ctx = canvasEl.getContext('2d');
-
-  chartInstance = new window.Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: timestamps,
-      datasets: [{
-        data: values,
-        borderColor: strokeColor,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        pointHoverBackgroundColor: strokeColor,
-        pointHoverBorderColor: hoverPointBorder,
-        pointHoverBorderWidth: 2,
-        tension: 0.08,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 200 },
-      interaction: {
-        intersect: false,
-        mode: 'index'
+    const result = await withProvider(
+      async () => {
+        const body = await cg(
+          `/coins/${encodeURIComponent(id)}/market_chart?vs_currency=${currency}&days=${days}`
+        );
+        return cleanPrices(body.prices || []);
       },
-      layout: {
-        padding: {
-          top: 8,
-          bottom: 12,
-          left: 10,
-          right: 20
+      async () => {
+        const start = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        const rows = await paprika(
+          `/tickers/${encodeURIComponent(id)}/historical?start=${encodeURIComponent(start)}` +
+            `&interval=${PAPRIKA_INTERVAL[days]}&limit=5000&quote=usd`
+        );
+        if (currency !== 'usd') {
+          note = 'Yedek kaynak geçmiş fiyatları yalnızca USD cinsinden sunar.';
         }
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          enabled: true,
-          backgroundColor: tooltipBg,
-          titleColor: tickColor,
-          bodyColor: tooltipText,
-          borderColor: tooltipBorder,
-          borderWidth: 1,
-          padding: 8,
-          displayColors: false,
-          titleFont: { family: 'JetBrains Mono', size: 10 },
-          bodyFont: {
-            family: 'JetBrains Mono',
-            size: 12,
-            weight: '500'
-          },
-          callbacks: {
-            title: items => {
-              if (!items.length) return '';
-
-              const timestamp = items[0].label;
-              const date = new Date(parseInt(timestamp, 10));
-
-              return date.toLocaleString('tr-TR', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-            },
-            label: context => currencyFormatter.format(context.parsed.y)
-          }
-        }
-      },
-      scales: {
-        x: {
-          display: true,
-          grid: {
-            color: gridColor,
-            drawBorder: false,
-            lineWidth: 0.5
-          },
-          ticks: {
-            color: tickColor,
-            font: { family: 'JetBrains Mono', size: 9 },
-            maxTicksLimit: 6,
-            maxRotation: 0,
-            autoSkip: true,
-            callback: function (value) {
-              const timestamp = this.getLabelForValue(value);
-              return formatXDate(parseInt(timestamp, 10), days);
-            }
-          }
-        },
-        y: {
-          display: true,
-          position: 'right',
-          grid: {
-            color: gridColor,
-            drawBorder: false,
-            lineWidth: 0.5
-          },
-          ticks: {
-            color: tickColor,
-            font: { family: 'JetBrains Mono', size: 9 },
-            maxTicksLimit: 5,
-            callback: value => compactFormatter.format(value)
-          }
-        }
+        return cleanPrices(
+          (Array.isArray(rows) ? rows : []).map(r => [Date.parse(r.timestamp), r.price])
+        );
       }
-    }
-  });
+    );
 
-  return true;
+    cache(res, days === 1 ? 900 : 3600);
+
+    return res.status(200).json(
+      envelope(result.source, result.source === 'coinpaprika' ? 'usd' : currency, {
+        id,
+        days,
+        prices: result.data,
+        ...(note ? { note } : {})
+      })
+    );
+  } catch (err) {
+    return error(res, err);
+  }
 }

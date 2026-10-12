@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     if (!ids) {
       result = await withProvider(() => cgMarkets(currency, page, perPage), () => paprikaMarkets(currency, page, perPage));
     } else {
-      result = await withProvider(async () => (await cg(`/coins/markets?vs_currency=${currency}&ids=${ids.join(',')}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`)).map(c => normalizeCg(c, currency)), async () => {
+      result = await withProvider(async () => (await cg(`/coins/markets?vs_currency=${currency}&ids=${ids.join(',')}&order=market_cap_desc&sparkline=true&price_change_percentage=24h`)).map(c => normalizeCg(c, currency)), async () => {
         const all = await paprika(`/tickers?quotes=${currency.toUpperCase()}`);
         const found = all.filter(p => ids.some(id => p.id === id || (p.symbol && p.symbol.toLowerCase() === id)));
         return found.map(p => normalizePaprika(p, currency, ids.find(id => id === p.id) || p.id));

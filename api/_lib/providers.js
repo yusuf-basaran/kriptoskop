@@ -4,7 +4,7 @@ const CG = 'https://api.coingecko.com/api/v3';
 const CP = 'https://api.coinpaprika.com/v1';
 export const cg = (path) => upstream(`${CG}${path}`, cgHeaders());
 export const paprika = (path) => upstream(`${CP}${path}`);
-export const cgMarkets = async (currency, page, perPage) => (await cg(`/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${perPage}&page=${page}&sparkline=false&price_change_percentage=24h`)).map(c => normalizeCg(c, currency));
+export const cgMarkets = async (currency, page, perPage) => (await cg(`/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${perPage}&page=${page}&sparkline=true&price_change_percentage=24h`)).map(c => normalizeCg(c, currency));
 export async function paprikaMarkets(currency, page, perPage) {
   const result = await paprika(`/tickers?quotes=${currency.toUpperCase()}`);
   const sorted = result.sort((a, b) => (a.rank || 999999) - (b.rank || 999999));

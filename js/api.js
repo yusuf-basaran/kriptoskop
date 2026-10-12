@@ -27,11 +27,29 @@ export async function searchCoinsGlobal(queryText, currency = 'usd') {
   const result = await request('search', { query: queryText.trim(), currency });
   return (result.coins || []).map(coin => coin.id);
 }
+// Son başarılı grafik yanıtları bellekte tutulur; ağ hatasında "önbellekteki grafik" olarak gösterilir.
+const chartCache = new Map();
+const CHART_CACHE_LIMIT = 40;
+const chartKey = (coinId, currency, days) => `${coinId}|${currency}|${days}`;
+
 export async function fetchCoinChart(coinId, currency = 'usd', days = 1, abortSignal = null) {
   const result = await request('chart', { id: coinId, currency, days }, abortSignal);
-  return { prices: result.prices || [], source: result.source, fetchedAt: result.fetchedAt, note: result.note };
+  const value = { prices: result.prices || [], source: result.source, fetchedAt: result.fetchedAt, note: result.note };
+  if (value.prices.length >= 2) {
+    const key = chartKey(coinId, currency, days);
+    chartCache.delete(key);
+    chartCache.set(key, value);
+    if (chartCache.size > CHART_CACHE_LIMIT) chartCache.delete(chartCache.keys().next().value);
+  }
+  return value;
 }
-export function getStaleChartData() { return null; }
+export function getStaleChartData(coinId, currency = 'usd', days = 1) {
+  return chartCache.get(chartKey(coinId, currency, days)) || null;
+}
+export async function fetchGlobalStats(currency = 'usd') {
+  const result = await request('global', { currency });
+  return { stats: result.stats || null, fearGreed: result.fearGreed || null, source: result.source, currency: result.currency || currency };
+}
 export async function fetchCoinDetail(coinId, currency = 'usd', abortSignal = null) {
   return request('coin', { id: coinId, currency }, abortSignal);
 }

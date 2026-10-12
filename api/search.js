@@ -11,7 +11,7 @@ export default async function handler(req, res) {
       const coins = (items.coins || []).slice(0, 25);
       for (const c of coins) COIN_REGISTRY.set(c.id.toLowerCase(), { name: c.name, symbol: c.symbol });
       const ids = coins.map(c => c.id).join(',');
-      const markets = ids ? await cg(`/coins/markets?vs_currency=${currency}&ids=${ids}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`) : [];
+      const markets = ids ? await cg(`/coins/markets?vs_currency=${currency}&ids=${ids}&order=market_cap_desc&sparkline=true&price_change_percentage=24h`) : [];
       return markets.map(c => normalizeCg(c, currency));
     }, async () => {
       const found = await paprika(`/search?q=${encodeURIComponent(query)}&c=currencies&limit=25`);

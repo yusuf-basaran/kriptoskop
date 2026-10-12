@@ -88,6 +88,7 @@ export function renderSkeletons(rowCount = 12) {
       </td>
       <td class="col-num"><span class="skel-block" style="width: 70px;"></span></td>
       <td class="col-num"><span class="skel-block" style="width: 50px;"></span></td>
+      <td class="col-spark"><span class="skel-block" style="width: 96px; height: 20px;"></span></td>
       <td class="col-num"><span class="skel-block" style="width: 90px;"></span></td>
     `;
     rowFragment.appendChild(tr);
@@ -122,6 +123,51 @@ function createStarSvg(isFilled) {
   );
   svg.appendChild(path);
   return svg;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// 7 günlük fiyat serisinden satır içi mini grafik (SVG). Veri yoksa kısa çizgi gösterir.
+function createSparkline(values, width = 96, height = 28) {
+  const wrap = document.createElement('span');
+  wrap.className = 'spark';
+
+  const series = Array.isArray(values) ? values.filter(v => Number.isFinite(v)) : [];
+  if (series.length < 2) {
+    wrap.classList.add('spark-empty');
+    wrap.textContent = '—';
+    return wrap;
+  }
+
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = max - min || 1;
+  const pad = 2;
+  const points = series.map((value, i) => {
+    const x = pad + (i / (series.length - 1)) * (width - pad * 2);
+    const y = height - pad - ((value - min) / range) * (height - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', '7 günlük fiyat eğrisi');
+
+  const line = document.createElementNS(SVG_NS, 'polyline');
+  line.setAttribute('points', points);
+  line.setAttribute('fill', 'none');
+  line.setAttribute('stroke', 'currentColor');
+  line.setAttribute('stroke-width', '1.5');
+  line.setAttribute('stroke-linejoin', 'round');
+  line.setAttribute('stroke-linecap', 'round');
+  svg.appendChild(line);
+
+  wrap.classList.add(series[series.length - 1] >= series[0] ? 'num-positive' : 'num-negative');
+  wrap.appendChild(svg);
+  return wrap;
 }
 
 export function renderMarketData(items, prevPricesMap = new Map(), currency = 'usd', currentView = 'all', onCoinClick = null, onFavToggle = null) {
@@ -216,11 +262,15 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
     tdChange.className = `col-num ${isPositive ? 'num-positive' : 'num-negative'}`;
     tdChange.textContent = changeText;
 
+    const tdSpark = document.createElement('td');
+    tdSpark.className = 'col-spark';
+    tdSpark.appendChild(createSparkline(coin.sparkline));
+
     const tdCap = document.createElement('td');
     tdCap.className = 'col-num';
     tdCap.textContent = mcapText;
 
-    tr.append(tdFav, tdRank, tdAsset, tdPrice, tdChange, tdCap);
+    tr.append(tdFav, tdRank, tdAsset, tdPrice, tdChange, tdSpark, tdCap);
     tr.addEventListener('click', () => {
       if (onCoinClick) onCoinClick(coin);
     });
@@ -276,7 +326,14 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
       </div>
     `;
 
-    card.append(cardHead, cardMetrics);
+    const cardSpark = document.createElement('div');
+    cardSpark.className = 'card-spark';
+    const sparkLabel = document.createElement('span');
+    sparkLabel.className = 'metric-label';
+    sparkLabel.textContent = '7G GRAFİK';
+    cardSpark.append(sparkLabel, createSparkline(coin.sparkline, 140, 32));
+
+    card.append(cardHead, cardMetrics, cardSpark);
     card.addEventListener('click', () => {
       if (onCoinClick) onCoinClick(coin);
     });
@@ -551,4 +608,84 @@ export function renderBanner(message, type = 'danger', onRetry = null) {
 
 export function clearBanner() {
   bannerRegion.textContent = '';
+}
+
+// --- PİYASA ÖZETİ ŞERİDİ ---
+const FNG_TR = {
+  'extreme fear': 'AŞIRI KORKU',
+  'fear': 'KORKU',
+  'neutral': 'NÖTR',
+  'greed': 'AÇGÖZLÜLÜK',
+  'extreme greed': 'AŞIRI AÇGÖZLÜLÜK'
+};
+
+function fngClass(label) {
+  const key = String(label || '').toLowerCase();
+  if (key.includes('fear')) return 'num-negative';
+  if (key.includes('greed')) return 'num-positive';
+  return '';
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+export function renderGlobalStats({ stats = null, fearGreed = null, currency = 'usd' } = {}) {
+  const cur = (stats && stats.currency) || currency;
+  const fmt = createFormatters(cur);
+  const pct = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const has = value => Number.isFinite(value);
+
+  setText('strip-mcap', stats && has(stats.totalMarketCap) ? fmt.compact.format(stats.totalMarketCap) : '--');
+  setText('strip-volume', stats && has(stats.totalVolume) ? fmt.compact.format(stats.totalVolume) : '--');
+  setText('strip-btc', stats && has(stats.btcDominance) ? `%${pct.format(stats.btcDominance)}` : '--');
+  setText('strip-eth', stats && has(stats.ethDominance) ? `%${pct.format(stats.ethDominance)}` : '--');
+  setText('strip-active', stats && has(stats.activeCoins) ? fmt.number.format(stats.activeCoins) : '--');
+
+  const changeEl = document.getElementById('strip-mcap-change');
+  if (changeEl) {
+    if (stats && has(stats.marketCapChange24h)) {
+      changeEl.textContent = fmt.percent.format(stats.marketCapChange24h / 100);
+      changeEl.className = `strip-delta ${stats.marketCapChange24h >= 0 ? 'num-positive' : 'num-negative'}`;
+    } else {
+      changeEl.textContent = '';
+    }
+  }
+
+  const btcBar = document.getElementById('strip-btc-bar');
+  if (btcBar) btcBar.style.width = stats && has(stats.btcDominance) ? `${Math.min(100, Math.max(0, stats.btcDominance))}%` : '0%';
+
+  const fngValueEl = document.getElementById('strip-fng');
+  const fngLabelEl = document.getElementById('strip-fng-label');
+  const fngMarker = document.getElementById('strip-fng-marker');
+  if (fngValueEl && fngLabelEl && fngMarker) {
+    if (fearGreed && has(fearGreed.value)) {
+      fngValueEl.textContent = String(Math.round(fearGreed.value));
+      fngLabelEl.textContent = FNG_TR[String(fearGreed.label || '').toLowerCase()] || '';
+      fngLabelEl.className = `strip-delta ${fngClass(fearGreed.label)}`;
+      fngMarker.style.left = `${Math.min(100, Math.max(0, fearGreed.value))}%`;
+      fngMarker.hidden = false;
+    } else {
+      fngValueEl.textContent = '--';
+      fngLabelEl.textContent = '';
+      fngMarker.hidden = true;
+    }
+  }
+}
+
+// --- TARAYICI BİLDİRİMİ DURUMU (alarm penceresi) ---
+export function renderNotifyStatus(permission) {
+  const statusEl = document.getElementById('notify-status');
+  const btn = document.getElementById('notify-btn');
+  if (!statusEl || !btn) return;
+
+  const labels = {
+    granted: 'AÇIK',
+    denied: 'ENGELLİ',
+    default: 'KAPALI',
+    unsupported: 'DESTEKLENMİYOR'
+  };
+  statusEl.textContent = labels[permission] || '--';
+  btn.hidden = permission !== 'default';
 }

@@ -1,5 +1,12 @@
 // Orkestrasyon, tema yönetimi, alarmlar ve veri döngüsü
-import { fetchTopCoins, fetchCoinsByIds, searchCoinsGlobal, fetchCoinChart, getStaleChartData, fetchCoinDetail } from './api.js';
+import { fetchTopCoins, fetchCoinsPage, fetchCoinsByIds, searchCoinsGlobal, fetchCoinChart, getStaleChartData, fetchCoinDetail, fetchGlobalStats } from './api.js';
+import {
+  getNotifyPermission,
+  requestNotifyPermission,
+  sendNotification,
+  playAlertSound,
+  addTitleBadge
+} from './notify.js';
 import { 
   getFavorites, 
   toggleFavorite, 
@@ -32,7 +39,9 @@ import {
   closeAlertsModal,
   renderAlertsList,
   showToast,
-  applyTheme
+  applyTheme,
+  renderGlobalStats,
+  renderNotifyStatus
 } from './ui.js';
 
 const state = {
@@ -54,6 +63,8 @@ const state = {
   theme: document.documentElement.getAttribute('data-theme') || 'dark',
   timerId: null,
   page: 1,
+  dataCurrency: null,
+  globalRequestId: 0,
   source: '',
   fetchedAt: null
 };
@@ -114,7 +125,8 @@ async function loadData(bypassCache = false) {
   }
 
   try {
-    state.page = 1;
+    const sameCurrency = state.dataCurrency === state.currency;
+    if (!sameCurrency) state.page = 1;
     const { data, fromCache, source, fetchedAt } = await fetchTopCoins(state.currency, bypassCache);
     state.source = source;
     state.fetchedAt = fetchedAt;
@@ -124,7 +136,25 @@ async function loadData(bypassCache = false) {
     state.rawCoins.forEach(c => priceMap.set(c.id, c.price));
     state.prevPrices = priceMap;
 
-    state.rawCoins = data;
+    // Sonsuz kaydırmayla yüklenen sayfalar yenilemede kaybolmasın: 2..N sayfalarını da tazele.
+    let merged = data;
+    if (sameCurrency && state.page > 1) {
+      const pages = Array.from({ length: state.page - 1 }, (_, i) => i + 2);
+      const results = await Promise.allSettled(pages.map(p => fetchCoinsPage(state.currency, p)));
+      const seen = new Set(data.map(c => c.id));
+      const extra = [];
+      let anyFailed = false;
+      results.forEach(r => {
+        if (r.status !== 'fulfilled') { anyFailed = true; return; }
+        r.value.data.forEach(c => { if (!seen.has(c.id)) { seen.add(c.id); extra.push(c); } });
+      });
+      // Bir sayfa alınamadıysa eski kayıtları koru; sıra bozulmasın.
+      if (anyFailed) state.rawCoins.forEach(c => { if (!seen.has(c.id)) { seen.add(c.id); extra.push(c); } });
+      merged = data.concat(extra);
+    }
+    state.dataCurrency = state.currency;
+
+    state.rawCoins = merged;
     if (state.activeCoin && state.activeCoinCurrency !== state.currency) {
       let refreshedCoin = data.find(coin => coin.id === state.activeCoin.id);
       if (!refreshedCoin) {
@@ -145,15 +175,32 @@ async function loadData(bypassCache = false) {
     }
     processPipeline();
 
-    // Alarmları kontrol et ve tetiklenenleri bildir
-    const fired = checkAlerts(data, state.currency);
+    // Alarmları kontrol et. İlk sayfada olmayan coinler için fiyatları ayrıca çek.
+    let alertCoins = state.rawCoins;
+    const known = new Set(alertCoins.map(c => c.id));
+    const missing = [...new Set(
+      getAlerts()
+        .filter(a => !a.triggered && a.currency === state.currency && !known.has(a.coinId))
+        .map(a => a.coinId)
+    )].slice(0, 50);
+    if (missing.length) {
+      try {
+        alertCoins = alertCoins.concat(await fetchCoinsByIds(state.currency, missing));
+      } catch {
+        // Bu turda alınamayan coinler sonraki yenilemede tekrar denenir.
+      }
+    }
+
+    const fired = checkAlerts(alertCoins, state.currency);
     fired.forEach(({ alert, currentPrice }) => {
       const condText = alert.condition === 'above' ? 'üzerine çıktı' : 'altına indi';
-      showToast(
-        `ALARM TETİKLENDİ // ${alert.coinSymbol}`,
-        `Fiyat ${condText}: ${currentPrice.toLocaleString('tr-TR')} ${alert.currency.toUpperCase()}`
-      );
+      const title = `ALARM TETİKLENDİ // ${alert.coinSymbol}`;
+      const message = `Fiyat ${condText}: ${currentPrice.toLocaleString('tr-TR')} ${alert.currency.toUpperCase()}`;
+      showToast(title, message);
+      sendNotification(title, message);
+      addTitleBadge();
     });
+    if (fired.length) playAlertSound();
 
     updateMetaStatus({
       timestamp: fetchedAt,
@@ -178,12 +225,23 @@ async function loadData(bypassCache = false) {
   }
 }
 
+// Piyasa özeti şeridi: hata olursa şerit "--" kalır, ana tablo etkilenmez.
+async function loadGlobal() {
+  const requestId = ++state.globalRequestId;
+  try {
+    const result = await fetchGlobalStats(state.currency);
+    if (requestId !== state.globalRequestId) return;
+    renderGlobalStats({ stats: result.stats ? { ...result.stats, currency: result.currency } : null, fearGreed: result.fearGreed, currency: state.currency });
+  } catch {
+    if (requestId === state.globalRequestId) renderGlobalStats({ currency: state.currency });
+  }
+}
+
 let loadingMore = false;
 async function loadNextPage() {
   if (loadingMore || state.page >= 10 || state.searchQuery.trim()) return;
   loadingMore = true;
   try {
-    const { fetchCoinsPage } = await import('./api.js');
     const result = await fetchCoinsPage(state.currency, state.page + 1);
     if (result.data.length) {
       state.page += 1;
@@ -343,6 +401,7 @@ function setupListeners() {
     state.searchCoins = [];
     state.searchRequestId++;
     loadData(false);
+    loadGlobal();
     const searchInput = document.getElementById('search-input');
     if (searchInput.value.trim().length >= 2) {
       searchInput.dispatchEvent(new Event('input'));
@@ -415,6 +474,11 @@ function setupListeners() {
       updateMetaStatus({ alertsCount: remaining.length });
     };
     openAlertsModal(getAlerts(), handleDelete);
+    renderNotifyStatus(getNotifyPermission());
+  });
+
+  document.getElementById('notify-btn').addEventListener('click', async () => {
+    renderNotifyStatus(await requestNotifyPermission());
   });
 
   document.getElementById('alerts-modal-close-btn').addEventListener('click', closeAlertsModal);
@@ -442,6 +506,8 @@ function setupListeners() {
       showToast('ALARM KAYDEDİLDİ', `${state.activeCoin.name} için hedef fiyat listeye eklendi.`);
       updateMetaStatus({ alertsCount: getAlerts().length });
       document.getElementById('alert-target-price').value = '';
+      // İlk alarmda bildirim izni iste (kullanıcı hareketi içinde çağrıldığı için tarayıcı izin verir).
+      if (getNotifyPermission() === 'default') requestNotifyPermission();
     } else {
       showToast('ALARM EKLENEMEDİ', res.error || 'Fiyat hedefini kontrol edin.');
     }
@@ -465,9 +531,11 @@ function init() {
   setupListeners();
   syncSortUI();
   loadData(false);
+  loadGlobal();
 
   state.timerId = setInterval(() => {
     loadData(false);
+    loadGlobal();
   }, 60 * 1000);
 }
 

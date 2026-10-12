@@ -183,6 +183,20 @@ export function cgHeaders() {
     : {};
 }
 
+// 7 günlük ~168 noktalık seriyi satır içi mini grafik için ~28 noktaya indirger.
+export function compactSparkline(values, points = 28) {
+  if (!Array.isArray(values)) return null;
+  const clean = values.filter(v => Number.isFinite(v));
+  if (clean.length < 2) return null;
+  const step = (clean.length - 1) / (points - 1);
+  const out = [];
+  for (let i = 0; i < points; i++) {
+    const v = clean[Math.min(clean.length - 1, Math.round(i * step))];
+    out.push(Number(v.toPrecision(6)));
+  }
+  return out;
+}
+
 export function normalizeCg(coin, currency) {
   COIN_REGISTRY.set(String(coin.id).toLowerCase(), {
     name: coin.name,
@@ -201,7 +215,8 @@ export function normalizeCg(coin, currency) {
     high24h: coin.high_24h ?? null,
     low24h: coin.low_24h ?? null,
     circulatingSupply: coin.circulating_supply ?? null,
-    volume24h: coin.total_volume ?? null
+    volume24h: coin.total_volume ?? null,
+    sparkline: compactSparkline(coin.sparkline_in_7d?.price)
   };
 }
 
@@ -231,6 +246,7 @@ export function normalizePaprika(coin, currency, id) {
     high24h: null,
     low24h: null,
     circulatingSupply: coin.circulating_supply ?? null,
-    volume24h: quote.volume_24h ?? null
+    volume24h: quote.volume_24h ?? null,
+    sparkline: null
   };
 }
