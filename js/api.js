@@ -29,7 +29,7 @@ export async function searchCoinsGlobal(queryText, currency = 'usd') {
 }
 export async function fetchCoinChart(coinId, currency = 'usd', days = 1, abortSignal = null) {
   const result = await request('chart', { id: coinId, currency, days }, abortSignal);
-  return { prices: result.prices || [], source: result.source, fetchedAt: result.fetchedAt, note: result.note };
+  return { prices: result.prices || [], currency: result.currency, source: result.source, fetchedAt: result.fetchedAt, note: result.note };
 }
 export function getStaleChartData() { return null; }
 export async function fetchCoinDetail(coinId, currency = 'usd', abortSignal = null) {

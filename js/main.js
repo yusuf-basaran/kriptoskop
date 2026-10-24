@@ -67,7 +67,8 @@ function debounce(fn, delay = 250) {
 }
 
 function processPipeline() {
-  const q = state.searchQuery.trim().toLowerCase();
+  const compact = value => value.toLowerCase().replace(/\s+/g, '');
+  const q = compact(state.searchQuery.trim());
   const favList = getFavorites();
 
   const coinMap = new Map(state.rawCoins.map(coin => [coin.id, coin]));
@@ -77,7 +78,7 @@ function processPipeline() {
       return false;
     }
     if (!q) return true;
-    return c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q);
+    return compact(c.name).includes(q) || compact(c.symbol).includes(q) || c.contract?.toLowerCase().includes(q);
   });
 
   result.sort((a, b) => {
@@ -115,10 +116,11 @@ async function loadData(bypassCache = false) {
 
   try {
     state.page = 1;
-    const { data, fromCache, source, fetchedAt } = await fetchTopCoins(state.currency, bypassCache);
+    const { data, fromCache, source, fetchedAt, note } = await fetchTopCoins(state.currency, bypassCache);
     state.source = source;
     state.fetchedAt = fetchedAt;
     clearBanner();
+    if (note) renderBanner(note, 'warning');
 
     const priceMap = new Map();
     state.rawCoins.forEach(c => priceMap.set(c.id, c.price));
@@ -188,7 +190,9 @@ async function loadNextPage() {
     if (result.data.length) {
       state.page += 1;
       const existing = new Set(state.rawCoins.map(coin => coin.id));
-      state.rawCoins.push(...result.data.filter(coin => !existing.has(coin.id)));
+      const identity = coin => `${coin.symbol.toLowerCase()}:${coin.name.toLowerCase().replace(/\s+/g, '')}`;
+      const featured = new Set(state.rawCoins.filter(coin => coin.contract).map(identity));
+      state.rawCoins.push(...result.data.filter(coin => !existing.has(coin.id) && !featured.has(identity(coin))));
       state.source = result.source;
       state.fetchedAt = result.fetchedAt;
       processPipeline();
@@ -207,7 +211,7 @@ async function handleCoinSelect(coin) {
   try {
     const detail = await fetchCoinDetail(coin.id, state.currency);
     if (requestId !== state.detailRequestId || state.activeCoin?.id !== coin.id) return;
-    const desc = detail.description?.tr || detail.description?.en || '';
+    const desc = typeof detail.description === 'string' ? detail.description : detail.description?.tr || detail.description?.en || '';
     updateModalDescription(desc);
   } catch {
     if (requestId === state.detailRequestId && state.activeCoin?.id === coin.id) {
@@ -220,6 +224,8 @@ async function loadChartData(coinId, days) {
   const requestId = ++state.chartRequestId;
   setChartLoading(true, false);
   const canvas = document.getElementById('coin-chart');
+  const chartNote = document.getElementById('chart-note');
+  chartNote.hidden = true;
   const showFallback = () => {
     const stale = getStaleChartData(coinId, state.currency, days);
     if (stale?.prices?.length >= 2) {
@@ -243,7 +249,9 @@ async function loadChartData(coinId, days) {
     }
 
     const isPositive = (prices[prices.length - 1][1] - prices[0][1]) >= 0;
-    const rendered = renderPriceChart(canvas, prices, state.currency, days, isPositive);
+    const rendered = renderPriceChart(canvas, prices, result.currency || state.currency, days, isPositive);
+    chartNote.textContent = result.note || '';
+    chartNote.hidden = !rendered || !result.note;
     
     // Grafik çizildiğinde hata katmanını kapat
     setChartLoading(false, !rendered);

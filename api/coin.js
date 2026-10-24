@@ -1,10 +1,17 @@
 import { method, idParam, cache, envelope, error, withProvider, normalizeCg } from './_lib/http.js';
 import { cg, paprika } from './_lib/providers.js';
+import { findFeatured, featuredMarkets } from './_lib/featured.js';
 export default async function handler(req, res) {
   if (!method(req, res)) return;
   try {
     const id = idParam(req.query.id), currency = String(req.query.currency || 'usd').toLowerCase();
     if (!['usd','eur','try'].includes(currency)) throw Object.assign(new Error('Geçersiz para birimi'), { status: 400, code: 'INVALID_CURRENCY' });
+    const featured = findFeatured(id);
+    if (featured) {
+      const [coin] = await featuredMarkets(currency, [featured]);
+      cache(res, 60);
+      return res.status(200).json(envelope(coin.source || 'unavailable', currency, { coin, description: featured.description }));
+    }
     const result = await withProvider(async () => {
       const [market, detail] = await Promise.all([
         cg(`/coins/markets?vs_currency=${currency}&ids=${id}&sparkline=false&price_change_percentage=24h`),
