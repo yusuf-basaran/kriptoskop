@@ -2,6 +2,26 @@
 
 Tarayıcı arayüzü veriyi yalnızca aynı origin üzerindeki `/api/*` Vercel Functions adreslerinden alır. Sunucu CoinGecko Demo API'sini dener; istek limiti, ağ, timeout veya servis hatasında CoinPaprika'ya geçer. Tarayıcıya API anahtarı gönderilmez.
 
+<!-- project-overview:start -->
+## Projeye genel bakış
+
+![KRİPTOSKOP proje özellikleri: Piyasa ve varlık arama, Fiyat grafikleri, Üç para birimi, Favori varlıklar, Fiyat alarmları, Yedek veri sağlayıcısı](docs/images/project-overview.png)
+
+[Görseli büyük aç](docs/images/project-overview.png) · [SVG kaynağı](docs/images/project-overview.svg)
+
+<details>
+<summary>Görseldeki özellikler ve ilgili kaynaklar</summary>
+
+- **[Piyasa ve varlık arama](js/main.js)** — Fiyat, hacim, piyasa değeri ve varlık detayları.
+- **[Fiyat grafikleri](js/chart.js)** — 1, 7, 30 ve 365 günlük grafik aralıkları.
+- **[Üç para birimi](js/storage.js)** — USD, EUR ve TRY ile piyasa görünümü.
+- **[Favori varlıklar](js/storage.js)** — Tarayıcıda saklanan kişisel takip listesi.
+- **[Fiyat alarmları](js/alerts.js)** — Hedef fiyat ve yön koşuluna göre alarm takibi.
+- **[Yedek veri sağlayıcısı](api/_lib/providers.js)** — Sunucu API katmanı, önbellek ve failover.
+
+</details>
+<!-- project-overview:end -->
+
 ## Yerel kurulum
 
 1. Node.js ve Vercel CLI kurun: `npm install --global vercel`.
