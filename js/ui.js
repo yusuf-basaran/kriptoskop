@@ -40,6 +40,10 @@ const themeText = document.getElementById('theme-text');
 
 let previousFocusedElement = null;
 
+function formatValue(formatter, value) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatter.format(value) : '—';
+}
+
 function createFormatters(currency = 'usd') {
   const cur = currency.toUpperCase();
   return {
@@ -149,15 +153,15 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
   items.forEach(coin => {
     const prevPrice = prevPricesMap.get(coin.id);
     let flashClass = '';
-    if (prevPrice !== undefined && prevPrice !== coin.price) {
+    if (Number.isFinite(prevPrice) && Number.isFinite(coin.price) && prevPrice !== coin.price) {
       flashClass = coin.price > prevPrice ? 'flash-up' : 'flash-down';
     }
 
-    const priceText = fmt.price.format(coin.price || 0);
-    const mcapText = fmt.compact.format(coin.marketCap || 0);
-    const changeVal = (coin.change24h || 0) / 100;
-    const changeText = fmt.percent.format(changeVal);
-    const isPositive = (coin.change24h || 0) >= 0;
+    const priceText = formatValue(fmt.price, coin.price);
+    const mcapText = formatValue(fmt.compact, coin.marketCap);
+    const changeVal = typeof coin.change24h === 'number' ? coin.change24h / 100 : null;
+    const changeText = formatValue(fmt.percent, changeVal);
+    const changeClass = changeVal === null ? '' : changeVal >= 0 ? 'num-positive' : 'num-negative';
     const favActive = isFavorite(coin.id);
 
     // Tablo Satırı
@@ -213,7 +217,7 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
     tdPrice.textContent = priceText;
 
     const tdChange = document.createElement('td');
-    tdChange.className = `col-num ${isPositive ? 'num-positive' : 'num-negative'}`;
+    tdChange.className = `col-num ${changeClass}`;
     tdChange.textContent = changeText;
 
     const tdCap = document.createElement('td');
@@ -264,7 +268,7 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
       </div>
       <div class="metric-field">
         <span class="metric-label">24S DEĞİŞİM</span>
-        <span class="metric-val ${isPositive ? 'num-positive' : 'num-negative'}">${changeText}</span>
+        <span class="metric-val ${changeClass}">${changeText}</span>
       </div>
       <div class="metric-field">
         <span class="metric-label">PİYASA DEĞERİ</span>
@@ -272,7 +276,7 @@ export function renderMarketData(items, prevPricesMap = new Map(), currency = 'u
       </div>
       <div class="metric-field">
         <span class="metric-label">24S HACİM</span>
-        <span class="metric-val">${fmt.compact.format(coin.volume24h || 0)}</span>
+        <span class="metric-val">${formatValue(fmt.compact, coin.volume24h)}</span>
       </div>
     `;
 
@@ -307,9 +311,9 @@ export function openDetailModal(coin, currency = 'usd') {
   modalCoinImg.src = coin.image || 'assets/coin-placeholder.svg';
   modalTitle.textContent = coin.name;
   modalSymbol.textContent = (coin.symbol || '').toUpperCase();
-  modalPrice.textContent = fmt.price.format(coin.price || 0);
-  modalHighLow.textContent = `${fmt.price.format(coin.high24h || 0)} / ${fmt.price.format(coin.low24h || 0)}`;
-  modalMcap.textContent = fmt.compact.format(coin.marketCap || 0);
+  modalPrice.textContent = formatValue(fmt.price, coin.price);
+  modalHighLow.textContent = `${formatValue(fmt.price, coin.high24h)} / ${formatValue(fmt.price, coin.low24h)}`;
+  modalMcap.textContent = formatValue(fmt.compact, coin.marketCap);
 
   const supply = coin.circulatingSupply ? fmt.number.format(coin.circulatingSupply) : 'Bilinmiyor';
   modalSupply.textContent = `${supply} ${(coin.symbol || '').toUpperCase()}`;

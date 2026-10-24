@@ -11,6 +11,19 @@ Tarayıcı arayüzü veriyi yalnızca aynı origin üzerindeki `/api/*` Vercel F
 
 Vercel dağıtımında Project Settings → Environment Variables bölümünde `COINGECKO_API_KEY` ekleyin. Preview ve Production ortamları için ayrı ayrı tanımlayın. Anahtarın `.env.local` dosyası veya git geçmişiyle paylaşılmadığını doğrulayın.
 
+## Takip edilen projeler
+
+Gibi Swap (GIBI, `gibi-swap`) ve Orta Chain (ORTA, `orta-chain`), piyasa sıralamalarından bağımsız olarak ilk sayfaya eklenir. Bu nedenle ilk sayfa `per_page` değerine ek olarak iki kayıt içerebilir; aynı varlık iki kez eklenmez. İsim, sembol ve boşluksuz isimlerle (`gibiswap`, `ortachain`) aranabilirler. Favoriler ve fiyat alarmları aynı ID’leri kullanır.
+
+Bu iki proje için fiyat, piyasa değeri ve grafik verileri CoinGecko’dan alınır. Demo anahtarı yoksa CoinGecko’nun herkese açık API’si denenir; `FORCE_FALLBACK` genel piyasa sağlayıcısını etkiler, bu özel sorguları etkilemez. Fiyat sorgusu başarısız olursa CoinPaprika’da isim ve sembol eşleşmesi, ardından resmi sözleşme adresleriyle GeckoTerminal havuz verileri denenir. GeckoTerminal fiyatı en likit uygun Ethereum havuzundan gelir; bu kaynaktaki 24 saatlik değişim ve hacim aynı havuza aittir. EUR/TRY dönüşümü CoinPaprika’nın eşzamanlı BTC/USD ve BTC/EUR veya BTC/TRY fiyatlarının oranıyla hesaplanır. Havuz ve kur sorguları 60 saniye bellekte önbelleklenir. Veri alınamazsa varlık kimliği korunur ve eksik değerler arayüzde `—` görünür. Genel liste alınamayıp bu projelerin fiyatları alınabilirse yalnızca bu projeler bir uyarıyla gösterilir. Grafik sorgusu başarısız olursa GeckoTerminal OHLCV kapanışları denenir. Bu yedek tarihçe yalnızca sağlayıcının sunduğu aralığı kapsar; EUR/TRY serileri güncel USD kuru ile çevrilir ve yanıtta bu sınırlamayı belirten bir not bulunur. Her iki grafik kaynağı da kullanılamazsa mevcut grafik hata durumu kullanılır.
+
+Resmi sitelerden doğrulanan Ethereum sözleşmeleri:
+
+- [Gibi Swap](https://gibiswap.com/): `0xb6cd7fee2daa8a2e7e4c0e194468af0f08be527d`
+- [Orta Chain](https://ortachain.com/): `0xcb20b537f5df50bccc00fe6a8eb4d57b14a89a03`
+
+API akışlarının regresyon kontrolleri: `npm test` (Node.js 18+).
+
 ## API uçları
 
 - `GET /api/markets?currency=usd&page=1&per_page=250`
@@ -47,6 +60,7 @@ Yedek servis denemesi: `FORCE_FALLBACK=1` ayarlayıp sunucuyu yeniden başlatın
 
 - CoinGecko API: https://www.coingecko.com/en/api
 - CoinPaprika API: https://coinpaprika.com/api/
+- GeckoTerminal API (takip edilen projeler için yedek): https://api.geckoterminal.com/docs/index.html
 
 ## Mülakat için kısa anlatım
 

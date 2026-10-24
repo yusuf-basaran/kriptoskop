@@ -2,5 +2,8 @@
   "name": "kriptoskop",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vercel dev" }
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "node --test"
+  }
 }
