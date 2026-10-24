@@ -1,6 +1,6 @@
 import { method, currencyParam, cache, envelope, error, withProvider } from './_lib/http.js';
-import { cgMarkets, paprikaMarkets, cg, paprika } from './_lib/providers.js';
-import { normalizeCg, normalizePaprika } from './_lib/http.js';
+import { cgMarkets, paprikaMarkets, cg, paprikaByIds } from './_lib/providers.js';
+import { normalizeCg } from './_lib/http.js';
 import { FEATURED_COINS, findFeatured, featuredMarkets, mergeFeatured } from './_lib/featured.js';
 
 export default async function handler(req, res) {
@@ -21,11 +21,21 @@ export default async function handler(req, res) {
       } else if (!ids) {
         result = await withProvider(() => cgMarkets(currency, page, perPage), () => paprikaMarkets(currency, page, perPage));
       } else {
-        result = await withProvider(async () => (await cg(`/coins/markets?vs_currency=${currency}&ids=${regularIds.join(',')}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`)).map(c => normalizeCg(c, currency)), async () => {
-          const all = await paprika(`/tickers?quotes=${currency.toUpperCase()}`);
-          const found = all.filter(p => regularIds.some(id => p.id === id || (p.symbol && p.symbol.toLowerCase() === id)));
-          return found.map(p => normalizePaprika(p, currency, ids.find(id => id === p.id) || p.id));
-        });
+        const primary = async requested => (await cg(`/coins/markets?vs_currency=${currency}&ids=${requested.join(',')}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`)).map(coin => normalizeCg(coin, currency));
+        result = await withProvider(() => primary(regularIds), () => paprikaByIds(regularIds, currency));
+        const missing = regularIds.filter(id => !result.data.some(coin => coin.id === id));
+        // A successful but empty response can mean that the saved IDs belong to
+        // the other provider. Try those IDs there instead of silently omitting them.
+        if (missing.length && process.env.FORCE_FALLBACK !== '1') {
+          try {
+            const source = result.source === 'coingecko' ? 'coinpaprika' : 'coingecko';
+            const extra = source === 'coinpaprika' ? await paprikaByIds(missing, currency) : await primary(missing);
+            if (extra.length) {
+              result.data.push(...extra);
+              result.source += `, ${source}`;
+            }
+          } catch { /* Return the matches that are available. */ }
+        }
       }
     } catch (err) {
       const featured = await featuredPromise;

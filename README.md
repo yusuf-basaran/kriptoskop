@@ -44,6 +44,10 @@ Resmi sitelerden doğrulanan Ethereum sözleşmeleri:
 
 API akışlarının regresyon kontrolleri: `npm test` (Node.js 18+).
 
+## Favori listesi
+
+Kaydedilen tüm favoriler, yüklenen piyasa sayfalarından bağımsız olarak açılışta, yenilemede ve Favoriler sekmesine geçildiğinde ID ile sorgulanır. İstekler 50’şer ID’lik gruplara bölünür. Bir favorinin verisi alınamazsa kayıt silinmez; satırı korunur ve eksik fiyat alanları `—` gösterilir. CoinPaprika sorguları ilk 250 kayıtla sınırlı değildir; sağlayıcı değişiminde tekil isim/slug eşleşmeleri de denenir ve kaydedilmiş ID korunur. Para birimi değiştiğinde önceki birime ait geç yanıtlar yok sayılır.
+
 ## API uçları
 
 - `GET /api/markets?currency=usd&page=1&per_page=250`

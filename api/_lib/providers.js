@@ -12,9 +12,17 @@ export async function paprikaMarkets(currency, page, perPage) {
   return sorted.slice(begin, begin + perPage).map(c => normalizePaprika(c, currency, c.id));
 }
 export async function paprikaByIds(ids, currency) {
-  const result = await paprikaMarkets(currency, 1, 250);
-  return result.filter(c => {
-    const meta = COIN_REGISTRY.get(c.id);
-    return ids.includes(c.id) || (meta && result.some(item => item.id === c.id && item.symbol?.toLowerCase() === meta.symbol.toLowerCase()));
+  const rows = await paprika(`/tickers?quotes=${currency.toUpperCase()}`);
+  const compact = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return ids.flatMap(id => {
+    const exact = rows.find(coin => coin.id === id);
+    const meta = COIN_REGISTRY.get(id);
+    const matches = exact ? [exact] : rows.filter(coin => {
+      if (meta) return compact(coin.name) === compact(meta.name) && compact(coin.symbol) === compact(meta.symbol);
+      const slug = coin.id?.startsWith(`${coin.symbol?.toLowerCase()}-`) ? coin.id.slice(coin.symbol.length + 1) : '';
+      return [coin.name, slug, coin.symbol].some(value => value && compact(value) === compact(id));
+    });
+    // Preserve the saved ID and avoid guessing when multiple tokens share a name/symbol.
+    return matches.length === 1 ? [normalizePaprika(matches[0], currency, id)] : [];
   });
 }

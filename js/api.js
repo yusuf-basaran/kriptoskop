@@ -19,8 +19,17 @@ export async function fetchCoinsPage(currency = 'usd', page = 1, forceBypass = f
 export async function fetchTopCoins(currency = 'usd', forceBypass = false) { return fetchCoinsPage(currency, 1, forceBypass); }
 export async function fetchCoinsByIds(currency = 'usd', coinIds = []) {
   if (!coinIds.length) return [];
-  const result = await request('markets', { currency, ids: coinIds.slice(0, 50).join(',') });
-  return result.coins || [];
+  const ids = [...new Set(coinIds)];
+  const coins = [];
+  let firstError;
+  for (let offset = 0; offset < ids.length; offset += 50) {
+    try {
+      const result = await request('markets', { currency, ids: ids.slice(offset, offset + 50).join(',') });
+      coins.push(...(result.coins || []));
+    } catch (err) { firstError ||= err; }
+  }
+  if (!coins.length && firstError) throw firstError;
+  return coins;
 }
 export async function searchCoinsGlobal(queryText, currency = 'usd') {
   if (!queryText.trim()) return [];

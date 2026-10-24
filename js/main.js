@@ -1,5 +1,6 @@
 // Orkestrasyon, tema yönetimi, alarmlar ve veri döngüsü
 import { fetchTopCoins, fetchCoinsByIds, searchCoinsGlobal, fetchCoinChart, getStaleChartData, fetchCoinDetail } from './api.js';
+import { favoriteRows, mergeFavoriteRows } from './favorites.js';
 import { 
   getFavorites, 
   toggleFavorite, 
@@ -40,6 +41,10 @@ const state = {
   filteredCoins: [],
   searchCoins: [],
   searchRequestId: 0,
+  favoriteCoins: [],
+  favoriteRequestId: 0,
+  dataRequestId: 0,
+  totalCoins: 0,
   prevPrices: new Map(),
   sortKey: 'marketCap',
   sortOrder: 'desc',
@@ -71,9 +76,9 @@ function processPipeline() {
   const q = compact(state.searchQuery.trim());
   const favList = getFavorites();
 
-  const coinMap = new Map(state.rawCoins.map(coin => [coin.id, coin]));
-  state.searchCoins.forEach(coin => coinMap.set(coin.id, coin));
-  let result = Array.from(coinMap.values()).filter(c => {
+  const coins = mergeFavoriteRows([...state.rawCoins, ...state.searchCoins], favList, state.favoriteCoins);
+  state.totalCoins = coins.length;
+  let result = coins.filter(c => {
     if (state.viewTab === 'fav' && !favList.includes(c.id)) {
       return false;
     }
@@ -101,7 +106,7 @@ function processPipeline() {
 
   updateMetaStatus({
     totalShown: result.length,
-    totalAll: state.rawCoins.length,
+    totalAll: state.totalCoins,
     favCount: favList.length,
     alertsCount: getAlerts().length,
     source: state.source,
@@ -109,14 +114,34 @@ function processPipeline() {
   });
 }
 
+async function loadFavoriteData() {
+  const requestId = ++state.favoriteRequestId;
+  const currency = state.currency;
+  const ids = getFavorites();
+  try {
+    const coins = await fetchCoinsByIds(currency, ids);
+    if (requestId !== state.favoriteRequestId || currency !== state.currency) return;
+    // Read the current IDs again so a removed favorite cannot reappear mid-request.
+    state.favoriteCoins = favoriteRows(getFavorites(), [...state.rawCoins, ...state.searchCoins, ...coins]);
+  } catch {
+    if (requestId !== state.favoriteRequestId || currency !== state.currency) return;
+    state.favoriteCoins = favoriteRows(getFavorites(), [...state.rawCoins, ...state.searchCoins]);
+  }
+  processPipeline();
+}
+
 async function loadData(bypassCache = false) {
+  const requestId = ++state.dataRequestId;
+  const currency = state.currency;
+  void loadFavoriteData();
   if (state.rawCoins.length === 0) {
     renderSkeletons(15);
   }
 
   try {
     state.page = 1;
-    const { data, fromCache, source, fetchedAt, note } = await fetchTopCoins(state.currency, bypassCache);
+    const { data, fromCache, source, fetchedAt, note } = await fetchTopCoins(currency, bypassCache);
+    if (requestId !== state.dataRequestId || currency !== state.currency) return;
     state.source = source;
     state.fetchedAt = fetchedAt;
     clearBanner();
@@ -145,10 +170,11 @@ async function loadData(bypassCache = false) {
         }
       }
     }
+    if (requestId !== state.dataRequestId || currency !== state.currency) return;
     processPipeline();
 
     // Alarmları kontrol et ve tetiklenenleri bildir
-    const fired = checkAlerts(data, state.currency);
+    const fired = checkAlerts([...data, ...state.favoriteCoins], state.currency);
     fired.forEach(({ alert, currentPrice }) => {
       const condText = alert.condition === 'above' ? 'üzerine çıktı' : 'altına indi';
       showToast(
@@ -163,17 +189,18 @@ async function loadData(bypassCache = false) {
       isCache: fromCache,
       isError: false,
       totalShown: state.filteredCoins.length,
-      totalAll: state.rawCoins.length,
+      totalAll: state.totalCoins,
       favCount: getFavorites().length,
       alertsCount: getAlerts().length
     });
   } catch (err) {
+    if (requestId !== state.dataRequestId || currency !== state.currency) return;
     const isRateLimit = err.status === 429;
     renderBanner(err.message, isRateLimit ? 'warning' : 'danger', () => loadData(true));
     updateMetaStatus({
       isError: true,
       totalShown: state.filteredCoins.length,
-      totalAll: state.rawCoins.length,
+      totalAll: state.totalCoins,
       favCount: getFavorites().length,
       alertsCount: getAlerts().length
     });
@@ -184,9 +211,11 @@ let loadingMore = false;
 async function loadNextPage() {
   if (loadingMore || state.page >= 10 || state.searchQuery.trim()) return;
   loadingMore = true;
+  const currency = state.currency;
   try {
     const { fetchCoinsPage } = await import('./api.js');
-    const result = await fetchCoinsPage(state.currency, state.page + 1);
+    const result = await fetchCoinsPage(currency, state.page + 1);
+    if (currency !== state.currency) return;
     if (result.data.length) {
       state.page += 1;
       const existing = new Set(state.rawCoins.map(coin => coin.id));
@@ -264,6 +293,7 @@ async function loadChartData(coinId, days) {
 function handleFavToggle(coinId) {
   toggleFavorite(coinId);
   processPipeline();
+  void loadFavoriteData();
 }
 
 function handleThemeToggle() {
@@ -350,6 +380,8 @@ function setupListeners() {
     setCurrency(state.currency);
     state.searchCoins = [];
     state.searchRequestId++;
+    state.favoriteCoins = [];
+    state.rawCoins = [];
     loadData(false);
     const searchInput = document.getElementById('search-input');
     if (searchInput.value.trim().length >= 2) {
@@ -371,6 +403,7 @@ function setupListeners() {
       btn.setAttribute('aria-selected', 'true');
       state.viewTab = btn.dataset.view;
       processPipeline();
+      if (state.viewTab === 'fav') void loadFavoriteData();
     });
   });
 

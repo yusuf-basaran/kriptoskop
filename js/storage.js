@@ -10,7 +10,7 @@ export function getFavorites() {
   try {
     const raw = localStorage.getItem(FAVORITES_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? [...new Set(parsed.filter(id => typeof id === 'string' && /^[a-z0-9-]+$/.test(id)))] : [];
   } catch {
     return [];
   }
